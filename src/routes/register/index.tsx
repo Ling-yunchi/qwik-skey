@@ -9,13 +9,30 @@ export const useRegister = routeAction$(
     await db.read();
     const user = db.data.users.find((user) => user.username === form.username);
     if (user) {
-      return fail(403, { message: "User already exists" });
+      db.data.logs.push({
+        id: db.data.logs.length + 1,
+        userId: -1,
+        action: "register",
+        time: Date.now(),
+        success: false,
+        reason: `username '${form.username}' already exists`,
+      });
+      await db.write();
+      return fail(403, { message: "username already exists" });
     }
     db.data.users.push({
       id: db.data.users.length + 1,
       username: form.username,
       password: form.password,
       seededPassword: "",
+    });
+    db.data.logs.push({
+      id: db.data.logs.length + 1,
+      userId: db.data.users[db.data.users.length - 1].id,
+      action: "register",
+      time: Date.now(),
+      success: true,
+      reason: "",
     });
     await db.write();
     return {
@@ -37,7 +54,7 @@ export default component$(() => {
 
   return (
     <div class="flex h-full w-full flex-col gap-2">
-      <h1 class="text-lg font-bold">注册</h1>
+      <h1 class="text-lg font-bold">Register</h1>
       <div class="flex flex-col gap-2">
         <label class="font-semibold">Username</label>
         <input
@@ -66,16 +83,15 @@ export default component$(() => {
                 return (errorMessages.value =
                   "Password must be at least 6 characters");
             }
-            log("registering...");
             const result = await register.submit({
               username: username.value,
               password: md5(password.value),
             });
             if (result.value.failed) {
-              log(result.value.message!);
+              await log(result.value.message!);
               return (errorMessages.value = result.value.message!);
             }
-            log(`registered user ${username} successfully`);
+            await log(`registered user ${username.value} successfully`);
           }}
         >
           Register

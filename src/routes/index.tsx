@@ -10,10 +10,27 @@ export const useSeed = routeAction$(
     await db.read();
     const user = db.data.users.find((user) => user.username === form.username);
     if (!user) {
+      db.data.logs.push({
+        id: db.data.logs.length + 1,
+        userId: -1,
+        action: "seed",
+        time: Date.now(),
+        success: false,
+        reason: `user ${form.username} not found`,
+      });
+      await db.write();
       return fail(404, { message: "User not found" });
     }
     const seed = getSeed();
     user.seededPassword = md5(user.password + seed);
+    db.data.logs.push({
+      id: db.data.logs.length + 1,
+      userId: user.id,
+      action: "seed",
+      time: Date.now(),
+      success: true,
+      reason: "",
+    });
     await db.write();
     return {
       seed,
@@ -29,9 +46,27 @@ export const useLogin = routeAction$(
     await db.read();
     const user = db.data.users.find((user) => user.username === form.username);
     if (!user) {
+      db.data.logs.push({
+        id: db.data.logs.length + 1,
+        userId: -1,
+        action: "login",
+        time: Date.now(),
+        success: false,
+        reason: `user ${form.username} not found`,
+      });
+      await db.write();
       return fail(404, { message: "User not found" });
     }
     if (user.seededPassword !== form.password) {
+      db.data.logs.push({
+        id: db.data.logs.length + 1,
+        userId: user.id,
+        action: "login",
+        time: Date.now(),
+        success: false,
+        reason: `invalid password`,
+      });
+      await db.write();
       return fail(403, { message: "Invalid password" });
     }
     const userKey = db.data.keys.find((key) => key.userId === user.id);
@@ -43,6 +78,14 @@ export const useLogin = routeAction$(
     } else {
       userKey.key = form.key;
     }
+    db.data.logs.push({
+      id: db.data.logs.length + 1,
+      userId: user.id,
+      action: "login",
+      time: Date.now(),
+      success: true,
+      reason: "",
+    });
     await db.write();
     return {
       userId: user.id,
@@ -60,16 +103,51 @@ export const useAuth = routeAction$(
     await db.read();
     const user = db.data.users.find((user) => user.id === form.userId);
     if (!user) {
+      db.data.logs.push({
+        id: db.data.logs.length + 1,
+        userId: -1,
+        action: "auth",
+        time: Date.now(),
+        success: false,
+        reason: `user ${form.userId} not found`,
+      });
+      await db.write();
       return fail(404, { message: "User not found" });
     }
     const userKey = db.data.keys.find((key) => key.userId === user.id);
     if (!userKey) {
+      db.data.logs.push({
+        id: db.data.logs.length + 1,
+        userId: user.id,
+        action: "auth",
+        time: Date.now(),
+        success: false,
+        reason: `user ${user.username} not login`,
+      });
+      await db.write();
       return fail(403, { message: "Invalid key" });
     }
     if (userKey.key !== md5(form.key)) {
+      db.data.logs.push({
+        id: db.data.logs.length + 1,
+        userId: user.id,
+        action: "auth",
+        time: Date.now(),
+        success: false,
+        reason: `user ${user.username} invalid key`,
+      });
+      await db.write();
       return fail(403, { message: "Invalid key" });
     }
     userKey.key = form.key;
+    db.data.logs.push({
+      id: db.data.logs.length + 1,
+      userId: user.id,
+      action: form.action,
+      time: Date.now(),
+      success: true,
+      reason: "",
+    });
     await db.write();
     return {
       message: `user ${user.username} do ${form.action} action success`,
@@ -87,15 +165,18 @@ export default component$(() => {
   const seed = useSeed();
   const auth = useAuth();
 
-  const errorMessages = useSignal("");
+  const loginErrorMessages = useSignal("");
   const username = useSignal("alice");
   const password = useSignal("123456");
   const keyNum = useSignal(5);
 
+  const loginUsername = useSignal("");
+  const loginPassword = useSignal("");
   const userId = useSignal(0);
   const keys = useSignal<string[]>([]);
   const keyIdx = useSignal(1);
 
+  const authErrorMessages = useSignal("");
   const key = useSignal("");
   const action = useSignal("");
 
@@ -103,8 +184,9 @@ export default component$(() => {
 
   return (
     <div class="flex h-full w-full flex-col">
+      {/* Login */}
       <div class="flex flex-col gap-2">
-        <h1 class="text-lg font-bold">登录</h1>
+        <h1 class="text-lg font-bold">Login</h1>
         <label class="font-semibold">Username</label>
         <input
           name="username"
@@ -132,52 +214,56 @@ export default component$(() => {
         <button
           class="rounded-lg bg-blue-500 p-2 text-white"
           onClick$={async () => {
-            errorMessages.value = "";
+            loginErrorMessages.value = "";
             switch (true) {
               case !username.value:
-                return (errorMessages.value = "Username is required");
+                return (loginErrorMessages.value = "Username is required");
               case !password.value:
-                return (errorMessages.value = "Password is required");
+                return (loginErrorMessages.value = "Password is required");
               case password.value.length < 6:
-                return (errorMessages.value =
+                return (loginErrorMessages.value =
                   "Password must be at least 6 characters");
               case keyNum.value <= 0:
-                return (errorMessages.value =
+                return (loginErrorMessages.value =
                   "Key number must be greater than 0");
             }
             const seedRes = await seed.submit({ username: username.value });
             if (seedRes.value.failed) {
-              return (errorMessages.value = seedRes.value.message!);
+              return (loginErrorMessages.value = seedRes.value.message!);
             }
-            await log(`获取Seed: ${seedRes.value.seed}`);
+            await log(`seed: ${seedRes.value.seed}`);
             keys.value = generateKeys(
               md5(password.value),
               seedRes.value.seed!,
               keyNum.value
             );
-            await log(`生成${keyNum.value}个Key: ${keys.value.join(", ")}`);
+            await log(
+              `generate ${keyNum.value} keys: ${keys.value.join(", ")}`
+            );
             const loginRes = await login.submit({
               username: username.value,
               password: md5(md5(password.value) + seedRes.value.seed),
               key: keys.value[0],
             });
             if (loginRes.value.failed) {
-              log(`登录失败: ${loginRes.value.message}`);
+              await log(`login fail: ${loginRes.value.message}`);
               keys.value = [];
-              return (errorMessages.value = loginRes.value.message!);
+              return (loginErrorMessages.value = loginRes.value.message!);
             }
             keyIdx.value = 1;
             userId.value = loginRes.value.userId!;
-            log(`用户${username.value}(id:${userId.value})登录成功`);
+            loginUsername.value = username.value;
+            loginPassword.value = password.value;
+            await log(`${username.value}(id:${userId.value}) login success`);
           }}
         >
           Login
         </button>
-        {errorMessages.value.length > 0 && (
-          <p class="text-red-500">{errorMessages.value}</p>
+        {loginErrorMessages.value.length > 0 && (
+          <p class="text-red-500">{loginErrorMessages.value}</p>
         )}
       </div>
-
+      {/* Auth */}
       <div class="mt-2 flex gap-2">
         <div class="flex flex-col gap-2">
           {keys.value.length > 0 && (
@@ -195,13 +281,13 @@ export default component$(() => {
                   } cursor-pointer transition-colors hover:bg-opacity-80`}
                   onClick$={() => (key.value = k)}
                 >
-                  {idx}:{k}
+                  [{idx}]{k}
                 </div>
               ))}
             </>
           )}
         </div>
-        <div class="flex-1 flex flex-col gap-2">
+        <div class="flex flex-1 flex-col gap-2">
           {keys.value.length > 0 && (
             <>
               <label class="font-semibold">Key</label>
@@ -219,20 +305,62 @@ export default component$(() => {
               <button
                 class="rounded-lg bg-blue-500 p-2 text-white"
                 onClick$={async () => {
+                  authErrorMessages.value = "";
+                  switch (true) {
+                    case !key.value:
+                      return (authErrorMessages.value = "Key is required");
+                    case !action.value:
+                      return (authErrorMessages.value = "Action is required");
+                  }
                   const res = await auth.submit({
                     userId: userId.value,
                     key: key.value,
                     action: action.value,
                   });
                   if (res.value.failed) {
-                    return log(`认证失败: ${res.value.message}`);
+                    await log(`auth fail: ${res.value.message}`);
+                    return (authErrorMessages.value = res.value.message!);
                   }
                   keyIdx.value++;
-                  log(`认证成功: ${res.value.message}`);
+                  await log(`auth success: ${res.value.message}`);
+                  if (keyIdx.value === keys.value.length) {
+                    await log("fresh keys");
+                    const seedRes = await seed.submit({
+                      username: loginUsername.value,
+                    });
+                    if (seedRes.value.failed) {
+                      await log(`fresh keys fail: ${seedRes.value.message}`);
+                      return (authErrorMessages.value = seedRes.value.message!);
+                    }
+                    await log(`seed: ${seedRes.value.seed}`);
+                    const newKeys = generateKeys(
+                      loginPassword.value,
+                      seedRes.value.seed!,
+                      keyNum.value
+                    );
+                    const loginRes = await login.submit({
+                      username: loginUsername.value,
+                      password: md5(
+                        md5(loginPassword.value) + seedRes.value.seed
+                      ),
+                      key: newKeys[0],
+                    });
+                    if (loginRes.value.failed) {
+                      await log(`fresh keys fail: ${loginRes.value.message}`);
+                      return (authErrorMessages.value =
+                        loginRes.value.message!);
+                    }
+                    keys.value = [...keys.value, ...newKeys];
+                    keyIdx.value = keys.value.length - keyNum.value + 1;
+                    await log(`fresh keys success: ${newKeys.join(", ")}`);
+                  }
                 }}
               >
                 Next
               </button>
+              {authErrorMessages.value.length > 0 && (
+                <p class="text-red-500">{authErrorMessages.value}</p>
+              )}
             </>
           )}
         </div>

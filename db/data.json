@@ -4,19 +4,51 @@
       "id": 1,
       "username": "alice",
       "password": "e10adc3949ba59abbe56e057f20f883e",
-      "seededPassword": "937aed845f6b4e71dad4d0bc08c738c5"
+      "seededPassword": "1e18d818fe5a56b7a20cf2465f6cf0f6"
     },
     {
       "id": 2,
       "username": "Alice",
       "password": "e10adc3949ba59abbe56e057f20f883e",
       "seededPassword": "8338b7491bea13d0571708eed5cec93f"
+    },
+    {
+      "id": 3,
+      "username": "admin",
+      "password": "e10adc3949ba59abbe56e057f20f883e",
+      "seededPassword": ""
     }
   ],
   "keys": [
     {
       "userId": 1,
-      "key": "190fe12393c1ac6d1f32e3da5d5931df"
+      "key": "d3470dc52091460df390952af4d6b39a"
+    }
+  ],
+  "logs": [
+    {
+      "id": 1,
+      "userId": 1,
+      "action": "seed",
+      "time": 1683340661657,
+      "success": true,
+      "reason": ""
+    },
+    {
+      "id": 2,
+      "userId": 1,
+      "action": "login",
+      "time": 1683340661744,
+      "success": true,
+      "reason": ""
+    },
+    {
+      "id": 3,
+      "userId": 1,
+      "action": "auth",
+      "time": 1683340691468,
+      "success": false,
+      "reason": "user alice invalid key"
     }
   ]
 }
