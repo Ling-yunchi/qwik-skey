@@ -160,18 +160,79 @@ export const useAuth = routeAction$(
   })
 );
 
+export const useRenew = routeAction$(
+  async (form, { fail }) => {
+    await db.read();
+    const user = db.data.users.find((user) => user.id === form.userId);
+    if (!user) {
+      db.data.logs.push({
+        id: db.data.logs.length + 1,
+        userId: -1,
+        action: "renew",
+        time: Date.now(),
+        success: false,
+        reason: `user ${form.userId} not found`,
+      });
+      await db.write();
+      return fail(404, { message: "User not found" });
+    }
+    const userKey = db.data.keys.find((key) => key.userId === user.id);
+    if (!userKey) {
+      db.data.logs.push({
+        id: db.data.logs.length + 1,
+        userId: user.id,
+        action: "renew",
+        time: Date.now(),
+        success: false,
+        reason: `user ${user.username} not login`,
+      });
+      await db.write();
+      return fail(403, { message: "Invalid key" });
+    }
+    if (userKey.key !== md5(form.key)) {
+      db.data.logs.push({
+        id: db.data.logs.length + 1,
+        userId: user.id,
+        action: "renew",
+        time: Date.now(),
+        success: false,
+        reason: `user ${user.username} invalid key`,
+      });
+      await db.write();
+      return fail(403, { message: "Invalid key" });
+    }
+    userKey.key = form.newKey;
+    db.data.logs.push({
+      id: db.data.logs.length + 1,
+      userId: user.id,
+      action: "renew",
+      time: Date.now(),
+      success: true,
+      reason: "",
+    });
+    await db.write();
+    return {
+      message: `user ${user.username} renew key success`,
+    };
+  },
+  zod$({
+    userId: z.number(),
+    key: z.string().nonempty(),
+    newKey: z.string().nonempty(),
+  })
+);
+
 export default component$(() => {
   const login = useLogin();
   const seed = useSeed();
   const auth = useAuth();
+  const renew = useRenew();
 
   const loginErrorMessages = useSignal("");
-  const username = useSignal("alice");
-  const password = useSignal("123456");
+  const username = useSignal("");
+  const password = useSignal("");
   const keyNum = useSignal(5);
 
-  const loginUsername = useSignal("");
-  const loginPassword = useSignal("");
   const userId = useSignal(0);
   const keys = useSignal<string[]>([]);
   const keyIdx = useSignal(1);
@@ -252,8 +313,6 @@ export default component$(() => {
             }
             keyIdx.value = 1;
             userId.value = loginRes.value.userId!;
-            loginUsername.value = username.value;
-            loginPassword.value = password.value;
             await log(`${username.value}(id:${userId.value}) login success`);
           }}
         >
@@ -323,32 +382,23 @@ export default component$(() => {
                   }
                   keyIdx.value++;
                   await log(`auth success: ${res.value.message}`);
-                  if (keyIdx.value === keys.value.length) {
+                  if (keyIdx.value === keys.value.length - 1) {
+                    // 1 key left, fresh keys
                     await log("fresh keys");
-                    const seedRes = await seed.submit({
-                      username: loginUsername.value,
-                    });
-                    if (seedRes.value.failed) {
-                      await log(`fresh keys fail: ${seedRes.value.message}`);
-                      return (authErrorMessages.value = seedRes.value.message!);
-                    }
-                    await log(`seed: ${seedRes.value.seed}`);
                     const newKeys = generateKeys(
-                      loginPassword.value,
-                      seedRes.value.seed!,
+                      getSeed(),
+                      getSeed(),
                       keyNum.value
                     );
-                    const loginRes = await login.submit({
-                      username: loginUsername.value,
-                      password: md5(
-                        md5(loginPassword.value) + seedRes.value.seed
-                      ),
-                      key: newKeys[0],
+                    const renewRes = await renew.submit({
+                      userId: userId.value,
+                      key: keys.value[keyIdx.value], // use the last key
+                      newKey: newKeys[0], // use the first new key
                     });
-                    if (loginRes.value.failed) {
-                      await log(`fresh keys fail: ${loginRes.value.message}`);
+                    if (renewRes.value.failed) {
+                      await log(`fresh keys fail: ${renewRes.value.message}`);
                       return (authErrorMessages.value =
-                        loginRes.value.message!);
+                        renewRes.value.message!);
                     }
                     keys.value = [...keys.value, ...newKeys];
                     keyIdx.value = keys.value.length - keyNum.value + 1;

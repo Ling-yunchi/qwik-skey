@@ -29,36 +29,42 @@ export default component$(() => {
   return (
     <div class="flex h-full w-full flex-col gap-2">
       <h1 class="text-lg font-bold">Server Log</h1>
-      <div class="flex-1">
-        <table class="w-full">
-          <thead>
-            <tr>
-              <th class="border">id</th>
-              <th class="border">userid</th>
-              <th class="border">username</th>
-              <th class="border">time</th>
-              <th class="border">action</th>
-              <th class="border">success</th>
-              <th class="border">reason</th>
+      <table class="w-full">
+        <thead>
+          <tr>
+            <th class="border">id</th>
+            <th class="border">userid</th>
+            <th class="border">username</th>
+            <th class="border">time</th>
+            <th class="border">action</th>
+            <th class="border">success</th>
+            <th class="border">reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {logs.value.logs.map((log) => (
+            <tr key={log.id}>
+              <td class="border">{log.id}</td>
+              <td class="border">{log.userId === -1 ? "-" : log.userId}</td>
+              <td class="border">{log.username === "" ? "-" : log.username}</td>
+              <td class="text-ellipsis whitespace-nowrap border">
+                {new Date(log.time).toLocaleString()}
+              </td>
+              <td class="border">{log.action}</td>
+              <td
+                class={`border ${
+                  log.success ? "text-green-500" : "text-red-500"
+                }`}
+              >
+                {log.success ? "true" : "false"}
+              </td>
+              <td class="text-ellipsis whitespace-nowrap border">
+                {log.reason === "" ? "-" : log.reason}
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {logs.value.logs.map((log) => (
-              <tr key={log.id}>
-                <td class="border">{log.id}</td>
-                <td class="border">{log.userId === -1 ? "-" : log.userId}</td>
-                <td class="border">
-                  {log.username === "" ? "-" : log.username}
-                </td>
-                <td class="border">{new Date(log.time).toLocaleString()}</td>
-                <td class="border">{log.action}</td>
-                <td class="border">{log.success ? "true" : "false"}</td>
-                <td class="border">{log.reason === "" ? "-" : log.reason}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
           <button
